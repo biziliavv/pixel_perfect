@@ -1,4 +1,8 @@
+import com.assertthat.selenium_shutterbug.core.Shutterbug;
+import com.assertthat.selenium_shutterbug.core.Snapshot;
+import com.assertthat.selenium_shutterbug.utils.web.ScrollStrategy;
 import com.google.common.io.Files;
+import org.apache.commons.exec.ExecuteException;
 import org.apache.commons.io.FileUtils;
 import org.im4java.core.CompareCmd;
 import org.im4java.core.IMOperation;
@@ -6,21 +10,31 @@ import org.im4java.process.ProcessStarter;
 import org.im4java.process.StandardStream;
 import org.openqa.selenium.*;
 import org.openqa.selenium.chrome.ChromeDriver;
+import org.openqa.selenium.chrome.ChromeOptions;
+import org.openqa.selenium.firefox.FirefoxDriver;
+import org.openqa.selenium.firefox.FirefoxOptions;
 import org.openqa.selenium.interactions.Actions;
+import org.openqa.selenium.remote.DesiredCapabilities;
 import org.openqa.selenium.support.ui.WebDriverWait;
+import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.BeforeMethod;
 import ru.yandex.qatools.ashot.AShot;
 import ru.yandex.qatools.ashot.Screenshot;
+import ru.yandex.qatools.ashot.comparison.ImageDiff;
+import ru.yandex.qatools.ashot.comparison.ImageDiffer;
 import ru.yandex.qatools.ashot.coordinates.WebDriverCoordsProvider;
+import ru.yandex.qatools.ashot.shooting.ShootingStrategies;
 
 import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Created by onurb on 06-Feb-17.
@@ -47,10 +61,10 @@ public class BaseTest {
     public String currentDir = System.getProperty("user.dir");
 
     //Main screenshot directory
-    public String parentScreenShotsLocation = currentDir + "\\ScreenShots\\";
+    public String parentScreenShotsLocation = currentDir +"/"+ "ScreenShots";
 
     //Main differences directory
-    public String parentDifferencesLocation = currentDir + "\\Differences\\";
+    public String parentDifferencesLocation = currentDir +"/"+ "Differences";
 
     //Element screenshot paths
     public String baselineScreenShotPath;
@@ -67,8 +81,23 @@ public class BaseTest {
     @BeforeClass
     public void setupTestClass() throws IOException {
         //Declare Firefox driver
-        System.setProperty("webdriver.chrome.driver", "drivers/chromedriver");
-        driver = new ChromeDriver();
+        //System.setProperty("webdriver.chrome.driver", "drivers/chromedriver");
+        //driver = new ChromeDriver();
+        ChromeOptions options = new ChromeOptions();
+        options.addArguments("--window-size=1920,1080");
+        options.addArguments("--start-maximized");
+        //options.addArguments("--start-fullscreen");
+        //options.addArguments("--headless");
+        driver = new ChromeDriver(options);
+       /* FirefoxOptions options = new FirefoxOptions();
+        options.setBinary("/Applications/Firefox.app/Contents/MacOS/firefox-bin");
+        DesiredCapabilities capabilities = DesiredCapabilities.firefox();
+        capabilities.setCapability("moz:firefoxOptions", options);
+        capabilities.setCapability("marionatte", false);
+        System.setProperty("webdriver.gecko.driver", "drivers/geckodriver");
+        driver = new FirefoxDriver(options);*/
+        driver.manage().timeouts().implicitlyWait(10, TimeUnit.SECONDS);
+
 
         //Maximize the browser
         //driver.manage().window().maximize();
@@ -182,13 +211,16 @@ public class BaseTest {
         actions.moveToElement(element).build().perform();
     }*/
 
+
     //Take Screenshot with AShot
-    public Screenshot takeScreenshot (WebElement element) {
+    public Screenshot takeScreenshot () {
         //Take screenshot with Ashot
         //Screenshot elementScreenShot = new AShot().takeScreenshot(driver, element);
-        Screenshot elementScreenShot = new AShot()
+        /*Screenshot elementScreenShot = new AShot()
                 .coordsProvider(new WebDriverCoordsProvider())
-                .takeScreenshot(driver,element);
+                .takeScreenshot(driver,element);*/
+        Screenshot elementScreenShot = new AShot().shootingStrategy(ShootingStrategies.viewportRetina(100, 0, 0, 2)).takeScreenshot(driver);
+
 
         //Print element size
         String size = "Height: " + elementScreenShot.getImage().getHeight() + "\n" +
@@ -196,6 +228,26 @@ public class BaseTest {
         System.out.print("Size: " + size);
 
         return elementScreenShot;
+    }
+    public void takeNewScreenshot() throws Exception {
+        //Take screenshot with Ashot
+        //Screenshot elementScreenShot = new AShot().takeScreenshot(driver, element);
+        /*Screenshot elementScreenShot = new AShot()
+                .coordsProvider(new WebDriverCoordsProvider())
+                .takeScreenshot(driver,element);*/
+     //Snapshot screenshot = Shutterbug.shootPage(driver, ScrollStrategy.WHOLE_PAGE,500,true).withName(testName + "_Actual.png");
+        File image = new File("/Users/vitaliybizilia/IdeaProjects/pixel_perfect/ScreenShots/Actual.png");
+        BufferedImage expectedImage = ImageIO.read(image);
+        boolean status = Shutterbug.shootPage(driver,ScrollStrategy.WHOLE_PAGE,500,true).withName("Expected").equals(expectedImage,0.1);
+        Assert.assertTrue(status);
+
+
+
+        //Print element size
+        /*String size = "Height: " + elementScreenShot.getImage().getHeight() + "\n" +
+                "Width: " + elementScreenShot.getImage().getWidth() + "\n";
+        System.out.print("Size: " + size);*/
+
     }
 
     //Write
@@ -265,6 +317,16 @@ public class BaseTest {
             throw ex;
         }
     }
+    public void compareByAnotherService() throws IOException {
+    BufferedImage expectedImage = ImageIO.read(new File(System.getProperty("user.dir") +"/"+testName+"_Baseline.png"));
+    Screenshot elementScreenShot = new AShot().shootingStrategy(ShootingStrategies.viewportRetina(100, 0, 0, 2)).takeScreenshot(driver);
+    BufferedImage actualImage = elementScreenShot.getImage();
+
+    ImageDiffer imgDiff = new ImageDiffer();
+    ImageDiff diff = imgDiff.makeDiff(actualImage, expectedImage);
+        Assert.assertFalse(diff.hasDiff(),"Images are Same");}
+
+
 
     //Compare Operation
     public void doComparison (Screenshot elementScreenShot) throws Exception {
@@ -279,6 +341,7 @@ public class BaseTest {
 
             //Try to use IM4Java for comparison
             compareImagesWithImageMagick(baselineScreenShotPath, actualScreenShotPath, differenceScreenShotPath);
+            //compareByAnotherService();
         } else {
             System.out.println("BaselineScreenshot is not exist! We put it into test screenshot folder.\n");
             //Put the screenshot to the specified folder
@@ -293,6 +356,58 @@ public class BaseTest {
             Thread.sleep(milliseconds);
         } catch (InterruptedException e) {
             e.printStackTrace();
+        }
+    }
+
+    public void makeComparison() throws IOException, InterruptedException {
+        BufferedImage expectedImage = ImageIO.read(new File(System.getProperty("user.dir")+"/ScreenShotsloginPageTest/loginPageTest_Baseline.png"));
+
+        System.out.println("\n expectedImage= "+expectedImage );
+        Thread.sleep(5000);
+
+        Screenshot elementScreenShot = new AShot().shootingStrategy(ShootingStrategies.viewportRetina(100, 0, 0, 2)).takeScreenshot(driver);
+
+        BufferedImage image = elementScreenShot.getImage();
+        ImageIO.write(image, "PNG", new File(System.getProperty("user.dir")+"/ScreenShotsloginPageTest/loginPageTest_Actual.png"));
+
+
+
+        BufferedImage actualImage = elementScreenShot.getImage();
+
+
+
+        ImageDiffer imgDiff = new ImageDiffer();
+
+        ImageDiff diff = imgDiff.makeDiff(expectedImage,actualImage);
+
+
+
+        BufferedImage diffImage = diff.getDiffImage();
+        ImageIO.write(image, "PNG", new File(System.getProperty("user.dir")+"/ScreenShotsloginPageTest/loginPageTest_Difference.png"));
+
+        System.out.println("\n diffImage= "+diffImage.getColorModel() );
+
+
+        if(diff.hasDiff()){
+            System.out.println("Images are not same");
+        }else {
+            System.out.println("Images are same");
+        }
+
+        diff = imgDiff.makeDiff(diffImage,actualImage);
+        //diff.getDiffImage()
+        if(diff.hasDiff()){
+            System.out.println(" diff Image & actual image are not same"+ diff.getDiffImage().getData());
+        }else {
+            System.out.println("Images are same");
+        }
+
+        diff = imgDiff.makeDiff(diffImage,expectedImage);
+
+        if(diff.hasDiff()){
+            System.out.println(" diff Image & xpected image are not same");
+        }else {
+            System.out.println(" expected & Diff Images are same");
         }
     }
 
